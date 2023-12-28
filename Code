@@ -1,0 +1,188 @@
+#importing libraries
+library(tidyverse)
+library(ggcorrplot)
+library(dplyr)
+library(MASS)
+library(gvlma)
+library(readxl)
+
+#library: readxl
+my_list <- read_excel("D:/Siddhi/R/top2018.xlsx")    
+
+#dimensions of dataset
+dim(my_list)
+
+#top n rows of of the dataset (by default n=6)
+head(my_list)
+
+#column names in the dataset
+names(my_list)
+
+#checking for duplicate values
+length(unique(my_list$name))
+length(unique(my_list$id))
+
+#checking for null values in each column
+colSums(is.na(my_list))
+
+#summarizing the dataset
+summary(my_list)
+
+#plotting a correlation matrix between variables
+#library: ggcorrplot
+corr <- round(cor(my_list[,4:16]),8)               
+ggcorrplot(corr)                                    
+
+#applying class function on the dataset
+sapply(my_list, class)
+
+#displaying unique key,mode, time_signature values
+unique(my_list$key)
+unique(my_list$mode)
+unique(my_list$time_signature)
+
+#converting key,mode, time_signature into factor class
+my_list$key <- as.factor(my_list$key)
+my_list$mode <- as.factor(my_list$mode)
+my_list$time_signature <- as.factor(my_list$time_signature)
+
+#applying class function on the dataset
+sapply(my_list, class)
+
+#converting the numerical keys to the actual musical keys
+levels(my_list$key)[1]  <-"C"
+levels(my_list$key)[2]  <-"C#"
+levels(my_list$key)[3]  <-"D"
+levels(my_list$key)[4]  <-"D#"
+levels(my_list$key)[5]  <-"E"
+levels(my_list$key)[6]  <-"F"
+levels(my_list$key)[7]  <-"F#"
+levels(my_list$key)[8]  <-"G"
+levels(my_list$key)[9]  <-"G#"
+levels(my_list$key)[10] <-"A"
+levels(my_list$key)[11] <-"A#"
+levels(my_list$key)[12] <-"B"
+
+#convert the duration milliseonds to mins
+my_list$duration_ms <- my_list$duration_ms/60000
+
+#adding popularity column to the my_list
+popularity <- c(1:100)
+#binding popularity with the my_list
+my_list <- cbind(my_list,popularity)
+
+#categorizing valence values
+my_list$valence[my_list$valence > 0.000 & my_list$valence <= 0.350 ] <- "sad"
+my_list$valence[my_list$valence >= 0.351 & my_list$valence <= 0.700 ] <- "happy"
+my_list$valence[my_list$valence >= 0.701 & my_list$valence <= 1.000 ] <- "Euphoric"
+
+#converting valence into factor class
+my_list$valence <- as.factor(my_list$valence)
+
+#using library ggplot2 from tidyverse to plot graphs
+
+#plotting density graph for variable energy
+ggplot(my_list) + geom_density(aes(energy),fill="#4d5382")
+
+#plotting bar graph for variable valence
+ggplot(my_list) + geom_bar(aes(valence),fill="#d77a61")
+
+#plotting bar graph for variable time_signature
+ggplot(my_list) + geom_bar(aes(time_signature),fill="#a5b2a5")
+
+#plotting density graph for variable duration_ms
+ggplot(my_list) + geom_density(aes(duration_ms),fill="#c4adac")
+
+#plotting density graph for variable danceablity
+ggplot(my_list) + geom_density(aes(danceability),fill="#43938a")
+
+#plotting bar graph for variable mode
+ggplot(my_list) + geom_bar(aes(mode),width = 0.4,fill="#c3d59f")
+
+#plotting density graph for variable speechiness
+ggplot(my_list) + geom_density(aes(speechiness),fill="#e1adad")
+
+#plotting density graph for variable acousticness
+ggplot(my_list) + geom_density(aes(acousticness),fill="#4b405f")
+
+#plotting bar graph for variable key
+ggplot(my_list) + geom_bar(aes(key),width = 0.4,fill="#d1b8a3")
+
+#new dataframe grouped by frequency of artist
+#library: dplyr
+my_frequency <- data.frame(my_list %>% 
+                             group_by(my_list$artists) %>% 
+                             summarise(no_rows = n()) %>%
+                             arrange(desc(no_rows)))              
+
+#new dataframe with top 10 most occurring artist
+my_frequency_10 <- my_frequency[1:10,]
+
+#plotting a bar graph for frequency of top 10 artists
+ggplot(my_frequency_10,aes(my_list.artists,no_rows))+
+  geom_bar(stat = "identity",width=0.4,fill="#982020")+
+  labs(x="Top 10 Artists")+
+  labs(y="Count of Songs in top 100 List")+
+  labs(title = "Top 10 Artist Counts")
+
+#plotting a polar scatter graph to compare acousticness with popularity
+ggplot(my_list,aes(popularity,acousticness)) + 
+  geom_point(stat="identity")+
+  geom_abline(intercept = 0.65,slope=0)+
+  labs(x="Popularity")+
+  labs(y="acousticness")+
+  labs(title = "Popularity vs acousticness")+
+  coord_polar()
+
+#plotting a scatter graph to compare instrumentalness with popularity
+ggplot(my_list,aes(popularity,instrumentalness)) + 
+  geom_point(stat="identity")+
+  labs(x="Popularity")+
+  labs(y="instrumentalness")+
+  labs(title = "Popularity vs instrumentalness")
+
+my_list_1 <- my_list
+
+#Splitting data into test and train.
+sample_data <- sample(2,nrow(my_list_1),replace=TRUE,prob = c(0.8,0.2))
+train_data <- my_list[sample_data == 1,]
+test_data <- my_list[sample_data == 2,]
+
+#Model creation
+fit_linear <- lm(energy ~ loudness+danceability+valence+speechiness+acousticness+instrumentalness+liveness , data=train_data)
+
+#checking assumptions
+#library: gvlma
+gvlma(fit_linear)                           
+
+#feature selection - Backward elimination
+step_1 <- stepAIC(fit_linear,direction = "backward")
+step_1$anova
+
+#Feature Selection - Both
+step_2 <- stepAIC(fit_linear,direction = "both")
+step_2$anova
+
+#Final Model:
+fit_final <- lm(energy ~ loudness + danceability +acousticness, data = train_data)
+
+#library: gvlma
+gvlma(fit_final)
+
+#summarizing the final model
+summary(fit_final)
+
+#comparing predicted and observed values
+predicted <- predict(fit_final,newdata = test_data)
+observed <- test_data$energy
+predicted
+observed
+
+#calculating value of R-squared & average prediction error
+SSE <- sum((observed - predicted) ^ 2)
+SST <- sum((observed - mean(observed)) ^ 2)
+r2 <- 1 - SSE/SST
+rmse <- sqrt(mean((predicted - observed)^2))
+
+rmse
+r2
